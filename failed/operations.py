@@ -64,7 +64,7 @@ class Sigmoid(Op):
         # context['sigx'] = sigx
         return TensorNode(sigx)
 
-    def backward(self, parent, outputs_gradient):
+    def backward(self, parent, outputs_gradient, weights):
         # EXAMPLE
         # gradient for X is X∇ = dl / dX∇
         # Break up with chain rule: X∇ = (dl / dY) * (dY / dX)
@@ -84,8 +84,13 @@ class Sigmoid(Op):
         # This is our scalar derivative so we know vectorize this to
         # X∇ = Y∇ ⨷ Y ⨷ (1 - Y)     (⨷ = element-wise multiplication)
         # Now these Ys show that we need more than only outputs-gradients also the forward pass output > this is what the context object is for
-        # print(parent.outputs[0].gradient)
-        return [[parent.outputs[0].gradient[idx] * i * (1- i) for idx, i in enumerate(j.value)]  for j in parent.outputs]
+        # Select the parent gradient that is non-zero (these are gradients for the weights, for sigmoid ouput none is returned since you cannot change it)
+        gradient = outputs_gradient[1] if len(outputs_gradient) > 1 else outputs_gradient[0]
+
+        t = []
+        for idx, val in enumerate(weights.value):
+            t.append(gradient[idx] * val * (1 - val))
+        return t
         # Single case: [outputs_gradient * parent.outputs[0].value * (1- parent.outputs[0].value)]
 
 class SoftMax(Op):
@@ -96,13 +101,24 @@ class SoftMax(Op):
         return TensorNode(init_value=[e**i/sum_inputs for i in s.value])
     
     def backward(self, parent, outputs_gradient):
-        gradient = []
-        for idx, value in enumerate(parent.outputs[0].value):
-            if outputs_gradient[idx] == 1:
-                gradient.append(-1 * (1-value))
-            else:
-                gradient.append(-value * -1)
-        return [gradient]
+        gradient = [[None] * len(parent.inputs[0].value)] * len(parent.outputs[0].value)
+        # for idx, value in enumerate(parent.outputs[0].value):
+        #     if outputs_gradient[idx] == 1:
+        #         gradient.append(-1 * (1-value))
+        #     else:
+        #         gradient.append(-value * -1)
+        # return [gradient]
+
+        s = parent.outputs[0].value
+        for i in range(len(gradient)):
+            for j in range(len(gradient)):
+                if i == j:
+                    gradient[i][j] = s[i] * (1-s[i])
+                else: 
+                    gradient[i][j] = -s[i]*s[j]
+        
+        # SHould return whole, gradient but always 2 equal rows. Why 4 items in gradient?
+        return [gradient[0]]
         
 
 class RowSum(Op):
@@ -171,17 +187,12 @@ class Multiply(Op):
         # By symmetrix we know that the same reuslt should hold for A∇ᵢⱼ
         # 3. Vectorization is easy because ij is always the same so A∇ = S∇B∇
         # So we can take the gradient for S that the system gives as and return it as the gradient for A and B
-        num_outputs = int(len(parent.inputs[1].value) / len(parent.inputs[0].value))
-        temp = [0] * len(parent.inputs[1].value)
-        for i, weight in enumerate(parent.inputs[1].value):
-            origin_idx = int(i / num_outputs)
-            temp[i] = parent.inputs[0].value[origin_idx] * outputs_gradient[0] # 1 because we cannot change the calculated input, only the added bias
+        # So the gradient of S times the input of B
+        Bgradient = []
+        for A_val in parent.inputs[0].value:
+            for grad_val in parent.outputs[0].gradient:
+                Bgradient.append(A_val*grad_val)
+        
 
-        temp_2 = [0] * len(parent.inputs[0].value)
-        for i, weight in enumerate(parent.inputs[1].value):
-            target_idx = i % len(parent.inputs[0].value)
-            origin_idx = int(i / num_outputs)
-            temp_2[target_idx] += weight * parent.inputs[0].value[origin_idx]
-
-        return temp_2, temp # We cannot change input so that will be None
+        return None, Bgradient # We cannot change input so that will be None
         # Original: outputs_gradient * i for i in parent.inputs[1].value

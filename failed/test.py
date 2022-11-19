@@ -40,13 +40,24 @@ for operation in network:
 
 # Backward pass
 print("\n\nBACKWARD")
+last_output_node_inputs = []
+
 for operation in network[::-1]:
-    output_node_gradient = operation.outputs[0].gradient if network.index(operation)<len(network)-1 else [1, 0]
+    if network.index(operation)<len(network)-1:
+         output_node_gradient = last_output_node_gradient
+    else: output_node_gradient = [1, 0]
+
+    args = [output_node_gradient]
+    if len(last_output_node_inputs) > 1:
+        args.append(last_output_node_inputs[1])
     print('###############\nOperation:', operation.op.__class__.__name__)
     print('Gradient of layer after this:', output_node_gradient)
-    for i, gradient in enumerate(operation.op.backward(operation, output_node_gradient)):
-        operation.inputs[i].gradient = gradient
+    for i, gradient in enumerate(operation.op.backward(operation, *args)):
+        operation.inputs[i].gradient = gradient # Ugly hack, but softmax gradient is [[0.25,0.25], [0.25,0.25]]
 
         print('\nInput:', operation.inputs[i].name,'->' ,operation.inputs[i].value)
-        print('Gradient:', operation.inputs[i].gradient)        
+        print('Gradient:', operation.inputs[i].gradient)
+    last_output_node_gradient = [input.gradient for input in operation.inputs]
+    last_output_node_inputs =  [input for input in operation.inputs]        
     print('###############\n')
+
