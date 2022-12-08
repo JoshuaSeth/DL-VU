@@ -1,6 +1,6 @@
 import math
-import numpy as np
 from errors import LayerError
+import random 
 
 class Layer:
     def forward(self, X, y_true, verbose=False):
@@ -27,7 +27,7 @@ class Dense(Layer):
 
         if width:
             self.width = width
-            self.W = [[np.random.normal() for i in range(width)] for j in range(input_width)]
+            self.W = [[random.gauss(0, 1) for i in range(width)] for j in range(input_width)]
         if weights:
             self.width = len(weights[0])
             self.W = weights
@@ -103,7 +103,9 @@ class Sigmoid(Layer):
 class Softmax(Layer):
     def forward(self, X, y_true, verbose=False):
         exponents = [math.exp(x) for x in X]
-        self.value = [x/np.sum(exponents) for x in exponents]
+        exp_sum = 0
+        for exp in exponents: exp_sum+= exp
+        self.value = [x/exp_sum for x in exponents]
         self.width = len(X)
         if verbose: print('\n',self.__class__.__name__, 'Width:', self.width, '\nIn:', X, "\nOut:", self.value)
         return self.value

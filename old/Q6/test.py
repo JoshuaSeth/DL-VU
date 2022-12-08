@@ -12,9 +12,29 @@ import seaborn as sns
 ytrain = [np.insert(np.zeros(9),y, 1) for y in ytrain]
 yval = [np.insert(np.zeros(9),y, 1) for y in yval]
 
-l1 = Dense(input_width=xtrain.shape[1], width = 300) #weights=[[1,1,1], [-1,-1,-1]]
+# Normalize
+xtrain = xtrain / np.max(xtrain)
+
+batch_size = 1
+alpha = 0.01
+
+# xtrain =np.array([
+#     [1, 0],
+#     [0, 1],
+#     [0,1], 
+#     [0,2],
+#     [0,0],
+#     [2,0],
+#     [2,2],
+#     [1,2],
+#     [2,1]
+# ])
+
+xtrain=np.array([[1, -1], [1, -1]])
+
+l1 = Dense(input_width=xtrain.shape[1], weights=[[1,1,1], [-1,-1,-1]]) #weights=[[1,1,1], [-1,-1,-1]]
 l2 = Sigmoid()
-l3 = Dense(input_width=l1.width, width=10) # weights=[[1,1], [-1, -1], [-1, -1]]
+l3 = Dense(input_width=l1.width, weights=[[1,1], [-1, -1], [-1, -1]]) # weights=[[1,1], [-1, -1], [-1, -1]]
 l4 = Softmax()
 ll = NLL()
 
@@ -24,23 +44,24 @@ log_forward = False
 log_backward = False
 log_update = False
 
-alpha = 0.004
-batch_size = 4
+
+x_train_batches = np.split(xtrain, np.arange(batch_size,len(xtrain),batch_size))
+y_train_batches = np.split(ytrain, np.arange(batch_size,len(xtrain),batch_size))
 
 losses = []
 losses_conf_int = []
-for epoch in range(30):
+for epoch in range(100):
     losses_per_item = []
-    for idx, row in enumerate(xtrain):
+    for idx, batch in enumerate(xtrain[:]):
         if(log_forward):print("\nFORWARD")
-        X = row
+        X = batch
         for layer in network:
-            X = layer.forward(X,y_true=ytrain[idx], verbose=log_forward)
+            X = layer.forward(X,y_true=np.array([1,0]), verbose=log_forward)
         losses_per_item.append(layer.value)
         losses_conf_int.append([epoch, layer.value])
 
         if(log_backward):print("\n\nBACKWARD")
-        context = {'y': ytrain[idx]}
+        context = {'y': np.array([1,0])}
         grad=None
         for layer in network[::-1]:
             grad = layer.backward(grad,context, verbose=log_backward)

@@ -25,7 +25,6 @@ log_backward = False
 log_update = False
 
 alpha = 0.004
-batch_size = 4
 
 losses = []
 losses_conf_int = []
