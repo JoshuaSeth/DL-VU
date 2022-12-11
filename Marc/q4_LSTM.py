@@ -13,29 +13,40 @@ from util import GlobalMaxPool, IMDBDataset
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 class LSTM(nn.Module):
-    def __init__(self, num_embeddings: int, embedding_size: int, hidden: int, num_classes: int):
+    def __init__(self, num_embeddings: int, embedding_size: int, hidden: int, num_layers: int, num_classes: int):
         super().__init__()
         
         self.embedding = nn.Embedding(num_embeddings=num_embeddings, embedding_dim=embedding_size)
-        self.lin1 = nn.Linear(embedding_size, hidden)
-        self.relu = nn.ReLU()
-        self.globalmaxpool = GlobalMaxPool(1)
         self.lstm = nn.LSTM(
-            input_size=hidden,
+            input_size=embedding_size,
             hidden_size=hidden,
-            num_layers=2,
+            num_layers=num_layers,
             batch_first=True
         )
+        self.fc = nn.Linear(
+            hidden,
+            num_classes
+        )
+        self.globalmaxpool = GlobalMaxPool(1)
         self.softmax = nn.Softmax(1)
 
     def forward(self, x):
         x = self.embedding(x)
-        x = self.relu(self.lin1(x))
-        x = self.globalmaxpool(x)
         x, _ = self.lstm(x)
+        x = self.fc(x)
+        x = self.globalmaxpool(x)
         return self.softmax(x)
 
 def main():
+    # argument parser
+    argparser = argparse.ArgumentParser()
+    argparser.add_argument("--embedding_size", default=300)
+    argparser.add_argument("--hidden_size", default=300)
+    argparser.add_argument("--layers", default=2)
+    argparser.add_argument("--lr", default=0.001)
+    argparser.add_argument("--epochs", default=5)
+    args = argparser.parse_args()
+
     # Load Data
     (x_train, y_train), (x_val, y_val), (i2w, w2i), numcls = load_imdb(final=False)
     train_data = IMDBDataset(x_train, y_train)
@@ -43,20 +54,15 @@ def main():
     train_loader = DataLoader(train_data, batch_size=128, shuffle=True)
     val_loader = DataLoader(val_data, batch_size=128, shuffle=False)
 
-    # model params
-    num_embeddings = len(i2w)
-    embedding_size = 300
-    hidden_layer_size = 300
-
     model = LSTM(
-        num_embeddings,
-        embedding_size,
-        hidden_layer_size,
-        numcls
+        num_embeddings=len(i2w),
+        embedding_size=args.embedding_size,
+        hidden=args.hidden_size,
+        num_layers=args.layers,
+        num_classes=numcls
     )
-    num_epochs = 5
     loss_func = nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
     # to log losses
     train_loss = []
@@ -68,7 +74,7 @@ def main():
     tb_writer = SummaryWriter(f"runs/imbb_LSTM_{timestamp}")
 
     # training
-    for epoch in range(num_epochs):
+    for epoch in range(args.epochs):
         model.train(True)
         t_loss = []
         # train model

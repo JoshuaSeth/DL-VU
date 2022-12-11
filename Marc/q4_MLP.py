@@ -34,6 +34,14 @@ class MLP(nn.Module):
 
 
 def main():
+    # argument parser
+    argparser = argparse.ArgumentParser()
+    argparser.add_argument("--embedding_size", default=300)
+    argparser.add_argument("--hidden_size", default=300)
+    argparser.add_argument("--lr", default=0.001)
+    argparser.add_argument("--epochs", default=5)
+    args = argparser.parse_args()
+
     # Load Data
     (x_train, y_train), (x_val, y_val), (i2w, w2i), numcls = load_imdb(final=False)
     train_data = IMDBDataset(x_train, y_train)
@@ -41,15 +49,15 @@ def main():
     train_loader = DataLoader(train_data, batch_size=128, shuffle=True)
     val_loader = DataLoader(val_data, batch_size=128, shuffle=False)
 
-    # model params
-    num_embeddings = len(i2w)
-    embedding_size = 300
-    hidden_layer_size = 300
-        
-    model = MLP(num_embeddings, embedding_size, hidden_layer_size, numcls)
+    model = MLP(
+        num_embeddings=len(i2w),
+        embedding_size=args.embedding_size,
+        hidden=args.hidden_size,
+        num_classes=numcls
+    )
     num_epochs = 5
     loss_func = nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     
     # to log losses
     train_loss = []
@@ -61,7 +69,7 @@ def main():
     tb_writer = SummaryWriter(f"runs/imbb_MLP_{timestamp}")
 
     # training
-    for epoch in range(num_epochs):
+    for epoch in range(args.epochs):
         model.train(True)
         t_loss = []
         # train model
