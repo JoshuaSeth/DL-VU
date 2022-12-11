@@ -108,7 +108,7 @@ def main():
         epoch_validation_accuracy = sum(correct) / len(correct)
         val_accuracy.append(epoch_validation_accuracy)
 
-        print(f"\nEpoch {epoch + 1}/{num_epochs}, Train loss: {epoch_train_loss}, Validation loss: {epoch_validation_loss}, Validation accuracy: {epoch_validation_accuracy}")
+        print(f"\nEpoch {epoch + 1}/{args.epochs}, Train loss: {epoch_train_loss}, Validation loss: {epoch_validation_loss}, Validation accuracy: {epoch_validation_accuracy}")
 
         tb_writer.add_scalar("train:loss", epoch_train_loss, epoch)
         tb_writer.add_scalar("validation:loss", epoch_validation_loss, epoch)
