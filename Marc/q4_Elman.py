@@ -1,4 +1,5 @@
 import argparse
+import json
 from datetime import datetime
 
 import matplotlib.pyplot as plt
@@ -124,8 +125,11 @@ def main():
     plt.title(f"Loss during training")
     plt.savefig(f"runs/imbb_Elman_{timestamp}.png")
 
-    with open(f"runs/imbb_Elman_{timestamp}.txt", "w") as f:
+    with open(f"runs/imdb_Elman_{timestamp}.txt", "w") as f:
         f.write(f"Final Accuracy: {val_accuracy[-1]*100:.2f}")
+
+    with open(f"runs/imdb_Elman_{timestamp}.json", "w") as f:
+        f.write(json.dumps(args))
 
 if __name__ == "__main__":
     main()
