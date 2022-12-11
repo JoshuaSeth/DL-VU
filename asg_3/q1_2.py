@@ -8,7 +8,14 @@ from rnn_data import load_imdb
 from torch import nn
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard.writer import SummaryWriter
-from utils import DEVICE, GlobalMaxPool, IMDBDataset, get_score, train_epoch
+from utils import (
+    DEVICE,
+    GlobalMaxPool,
+    IMDBDataset,
+    collate_fn_padding,
+    get_score,
+    train_epoch,
+)
 
 
 # %%
@@ -40,8 +47,12 @@ train_data = IMDBDataset(x_train, y_train)
 val_data = IMDBDataset(x_val, y_val)
 
 # Dataloaders
-train_loader = DataLoader(train_data, batch_size=128, shuffle=True)
-val_loader = DataLoader(val_data, batch_size=128, shuffle=True)
+train_loader = DataLoader(
+    train_data, batch_size=128, shuffle=True, collate_fn=collate_fn_padding
+)
+val_loader = DataLoader(
+    val_data, batch_size=128, shuffle=True, collate_fn=collate_fn_padding
+)
 
 # %%
 # Model parameters

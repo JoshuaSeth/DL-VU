@@ -5,33 +5,45 @@ from datetime import datetime
 import matplotlib.pyplot as plt
 import seaborn as sns
 import torch
-from data_rnn import load_imdb
+from rnn_data import load_imdb
 from torch import nn
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard.writer import SummaryWriter
-from util import GlobalMaxPool, IMDBDataset
+from utils import GlobalMaxPool, IMDBDataset, collate_fn_padding
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-class MLP(nn.Module):
-    def __init__(self, num_embeddings: int, embedding_size: int, hidden: int, num_classes: int):
+
+class LSTM(nn.Module):
+    def __init__(
+        self,
+        num_embeddings: int,
+        embedding_size: int,
+        hidden: int,
+        num_layers: int,
+        num_classes: int,
+    ):
         super().__init__()
 
-        self.embedding = nn.Embedding(num_embeddings=num_embeddings, embedding_dim=embedding_size)
-        self.lin1 = nn.Linear(embedding_size, hidden)
-        self.relu = nn.ReLU()
+        self.embedding = nn.Embedding(
+            num_embeddings=num_embeddings, embedding_dim=embedding_size
+        )
+        self.lstm = nn.LSTM(
+            input_size=embedding_size,
+            hidden_size=hidden,
+            num_layers=num_layers,
+            batch_first=True,
+        )
+        self.fc = nn.Linear(hidden, num_classes)
         self.globalmaxpool = GlobalMaxPool(1)
-        self.lin2 = nn.Linear(hidden, num_classes)
         self.softmax = nn.Softmax(1)
 
     def forward(self, x):
         x = self.embedding(x)
-        x = self.relu(self.lin1(x))
+        x, _ = self.lstm(x)
+        x = self.fc(x)
         x = self.globalmaxpool(x)
-        x = self.softmax(self.lin2(x))
-        return x
-
-
+        return self.softmax(x)
 
 
 def main():
@@ -39,6 +51,7 @@ def main():
     argparser = argparse.ArgumentParser()
     argparser.add_argument("--embedding_size", default=300)
     argparser.add_argument("--hidden_size", default=300)
+    argparser.add_argument("--layers", default=2)
     argparser.add_argument("--lr", default=0.001)
     argparser.add_argument("--epochs", default=5)
     args = argparser.parse_args()
@@ -47,19 +60,23 @@ def main():
     (x_train, y_train), (x_val, y_val), (i2w, w2i), numcls = load_imdb(final=False)
     train_data = IMDBDataset(x_train, y_train)
     val_data = IMDBDataset(x_val, y_val)
-    train_loader = DataLoader(train_data, batch_size=128, shuffle=True)
-    val_loader = DataLoader(val_data, batch_size=128, shuffle=False)
+    train_loader = DataLoader(
+        train_data, batch_size=128, shuffle=True, collate_fn=collate_fn_padding
+    )
+    val_loader = DataLoader(
+        val_data, batch_size=128, shuffle=False, collate_fn=collate_fn_padding
+    )
 
-    model = MLP(
+    model = LSTM(
         num_embeddings=len(i2w),
         embedding_size=args.embedding_size,
         hidden=args.hidden_size,
-        num_classes=numcls
+        num_layers=args.layers,
+        num_classes=numcls,
     )
-    num_epochs = 5
     loss_func = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
-    
+
     # to log losses
     train_loss = []
     val_loss = []
@@ -67,7 +84,7 @@ def main():
 
     # tensorboard
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    tb_writer = SummaryWriter(f"runs/imbb_MLP_{timestamp}")
+    tb_writer = SummaryWriter(f"runs/imbb_LSTM_{timestamp}")
 
     # training
     for epoch in range(args.epochs):
@@ -106,7 +123,9 @@ def main():
         epoch_validation_accuracy = sum(correct) / len(correct)
         val_accuracy.append(epoch_validation_accuracy)
 
-        print(f"Epoch {epoch + 1}/{args.epochs}, Train loss: {epoch_train_loss}, Validation loss: {epoch_validation_loss}, Validation accuracy: {epoch_validation_accuracy}")
+        print(
+            f"Epoch {epoch + 1}/{args.epochs}, Train loss: {epoch_train_loss}, Validation loss: {epoch_validation_loss}, Validation accuracy: {epoch_validation_accuracy}"
+        )
 
         tb_writer.add_scalar("train:loss", epoch_train_loss, epoch)
         tb_writer.add_scalar("validation:loss", epoch_validation_loss, epoch)
@@ -120,12 +139,12 @@ def main():
     plt.ylabel("CE Loss")
     plt.xlabel("Epoch")
     plt.title(f"Loss during training")
-    plt.savefig(f"runs/imbb_MLP_{timestamp}.png")
+    plt.savefig(f"runs/imbb_LSTM_{timestamp}.png")
 
-    with open(f"runs/imdb_MLP_{timestamp}.txt", "w") as f:
+    with open(f"runs/imdb_LSTM_{timestamp}.txt", "w") as f:
         f.write(f"Final Accuracy: {val_accuracy[-1]*100:.2f}")
-    
-    with open(f"runs/imdb_Elman_{timestamp}.json", "w") as f:
+
+    with open(f"runs/imdb_LSTM_{timestamp}.json", "w") as f:
         f.write(json.dumps(args))
 
 

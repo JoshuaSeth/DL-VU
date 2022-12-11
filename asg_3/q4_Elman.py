@@ -5,38 +5,47 @@ from datetime import datetime
 import matplotlib.pyplot as plt
 import seaborn as sns
 import torch
-from data_rnn import load_imdb
+from rnn_data import load_imdb
 from torch import nn
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard.writer import SummaryWriter
-from util import GlobalMaxPool, IMDBDataset
+from utils import GlobalMaxPool, IMDBDataset, collate_fn_padding
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-class LSTM(nn.Module):
-    def __init__(self, num_embeddings: int, embedding_size: int, hidden: int, num_layers: int, num_classes: int):
+
+class Elman(nn.Module):
+    def __init__(
+        self,
+        num_embeddings: int,
+        embedding_size: int,
+        hidden: int,
+        rnn_layers,
+        num_classes: int,
+    ):
         super().__init__()
-        
-        self.embedding = nn.Embedding(num_embeddings=num_embeddings, embedding_dim=embedding_size)
-        self.lstm = nn.LSTM(
-            input_size=embedding_size,
-            hidden_size=hidden,
-            num_layers=num_layers,
-            batch_first=True
-        )
-        self.fc = nn.Linear(
-            hidden,
-            num_classes
+        self.embedding = nn.Embedding(
+            num_embeddings=num_embeddings, embedding_dim=embedding_size
         )
         self.globalmaxpool = GlobalMaxPool(1)
+        self.rnn = nn.RNN(
+            input_size=embedding_size,
+            hidden_size=hidden,
+            num_layers=rnn_layers,
+            nonlinearity="relu",
+            batch_first=True,
+        )
+        self.fc = nn.Linear(hidden, num_classes)
         self.softmax = nn.Softmax(1)
 
     def forward(self, x):
         x = self.embedding(x)
-        x, _ = self.lstm(x)
-        x = self.fc(x)
+        x, hidden = self.rnn(x)
         x = self.globalmaxpool(x)
-        return self.softmax(x)
+        x = self.fc(x)
+        x = self.softmax(x)
+        return x
+
 
 def main():
     # argument parser
@@ -52,16 +61,21 @@ def main():
     (x_train, y_train), (x_val, y_val), (i2w, w2i), numcls = load_imdb(final=False)
     train_data = IMDBDataset(x_train, y_train)
     val_data = IMDBDataset(x_val, y_val)
-    train_loader = DataLoader(train_data, batch_size=128, shuffle=True)
-    val_loader = DataLoader(val_data, batch_size=128, shuffle=False)
+    train_loader = DataLoader(
+        train_data, batch_size=64, shuffle=True, collate_fn=collate_fn_padding
+    )
+    val_loader = DataLoader(
+        val_data, batch_size=64, shuffle=False, collate_fn=collate_fn_padding
+    )
 
-    model = LSTM(
+    model = Elman(
         num_embeddings=len(i2w),
         embedding_size=args.embedding_size,
         hidden=args.hidden_size,
-        num_layers=args.layers,
-        num_classes=numcls
+        rnn_layers=args.layers,
+        num_classes=numcls,
     )
+    model.to(DEVICE)
     loss_func = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
@@ -72,7 +86,7 @@ def main():
 
     # tensorboard
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    tb_writer = SummaryWriter(f"runs/imbb_LSTM_{timestamp}")
+    tb_writer = SummaryWriter(f"runs/imbb_Elman_{timestamp}")
 
     # training
     for epoch in range(args.epochs):
@@ -111,7 +125,9 @@ def main():
         epoch_validation_accuracy = sum(correct) / len(correct)
         val_accuracy.append(epoch_validation_accuracy)
 
-        print(f"Epoch {epoch + 1}/{args.epochs}, Train loss: {epoch_train_loss}, Validation loss: {epoch_validation_loss}, Validation accuracy: {epoch_validation_accuracy}")
+        print(
+            f"\nEpoch {epoch + 1}/{args.epochs}, Train loss: {epoch_train_loss}, Validation loss: {epoch_validation_loss}, Validation accuracy: {epoch_validation_accuracy}"
+        )
 
         tb_writer.add_scalar("train:loss", epoch_train_loss, epoch)
         tb_writer.add_scalar("validation:loss", epoch_validation_loss, epoch)
@@ -125,12 +141,12 @@ def main():
     plt.ylabel("CE Loss")
     plt.xlabel("Epoch")
     plt.title(f"Loss during training")
-    plt.savefig(f"runs/imbb_LSTM_{timestamp}.png")
+    plt.savefig(f"runs/imbb_Elman_{timestamp}.png")
 
-    with open(f"runs/imdb_LSTM_{timestamp}.txt", "w") as f:
+    with open(f"runs/imdb_Elman_{timestamp}.txt", "w") as f:
         f.write(f"Final Accuracy: {val_accuracy[-1]*100:.2f}")
-    
-    with open(f"runs/imdb_LSTM_{timestamp}.json", "w") as f:
+
+    with open(f"runs/imdb_Elman_{timestamp}.json", "w") as f:
         f.write(json.dumps(args))
 
 

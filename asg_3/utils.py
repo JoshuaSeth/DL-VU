@@ -16,12 +16,10 @@ class GlobalMaxPool(nn.Module):
 
 
 class IMDBDataset(Dataset):
-    def __init__(self, x, y, padding_value=0) -> None:
+    def __init__(self, x, y) -> None:
         super().__init__()
 
-        x = [torch.tensor(xi) for xi in x]
-        self.x = pad_sequence(x, batch_first=True, padding_value=padding_value)
-
+        self.x = [torch.tensor(xi) for xi in x]
         self.y = torch.tensor(y)
 
     def __len__(self):
@@ -73,3 +71,8 @@ def get_score(model, data_loader, loss_func, device=DEVICE):
     accuracy = sum(correct) / len(correct)
 
     return mean_loss, accuracy
+
+
+def collate_fn_padding(samples):
+    x, y = list(zip(*samples))
+    return pad_sequence(x, batch_first=True, padding_value=0), torch.tensor(y)
