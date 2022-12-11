@@ -9,9 +9,7 @@ from rnn_data import load_imdb
 from torch import nn
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard.writer import SummaryWriter
-from utils import GlobalMaxPool, IMDBDataset, collate_fn_padding
-
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+from utils import DEVICE, GlobalMaxPool, IMDBDataset, collate_fn_padding
 
 
 class Elman(nn.Module):
@@ -27,7 +25,6 @@ class Elman(nn.Module):
         self.embedding = nn.Embedding(
             num_embeddings=num_embeddings, embedding_dim=embedding_size
         )
-        self.globalmaxpool = GlobalMaxPool(1)
         self.rnn = nn.RNN(
             input_size=embedding_size,
             hidden_size=hidden,
@@ -35,12 +32,13 @@ class Elman(nn.Module):
             nonlinearity="relu",
             batch_first=True,
         )
+        self.globalmaxpool = GlobalMaxPool(1)
         self.fc = nn.Linear(hidden, num_classes)
         self.softmax = nn.Softmax(1)
 
     def forward(self, x):
         x = self.embedding(x)
-        x, hidden = self.rnn(x)
+        x, _ = self.rnn(x)
         x = self.globalmaxpool(x)
         x = self.fc(x)
         x = self.softmax(x)
@@ -152,3 +150,9 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# Epoch 1/5, Train loss: 0.5244621086996585, Validation loss: 0.46121981098682063, Validation accuracy: 0.847
+# Epoch 2/5, Train loss: 0.43711112987119166, Validation loss: 0.4388834758649898, Validation accuracy: 0.8662
+# Epoch 3/5, Train loss: 0.40346398835365005, Validation loss: 0.43181701098816305, Validation accuracy: 0.8754
+# Epoch 4/5, Train loss: 0.38002006657207354, Validation loss: 0.48667472412314594, Validation accuracy: 0.819
+# Epoch 5/5, Train loss: 0.3599388538458096, Validation loss: 0.4263809296903731, Validation accuracy: 0.8798

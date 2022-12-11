@@ -9,9 +9,7 @@ from rnn_data import load_imdb
 from torch import nn
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard.writer import SummaryWriter
-from utils import GlobalMaxPool, IMDBDataset, collate_fn_padding
-
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+from utils import DEVICE, GlobalMaxPool, IMDBDataset, collate_fn_padding
 
 
 class MLP(nn.Module):
@@ -51,10 +49,10 @@ def main():
     train_data = IMDBDataset(x_train, y_train)
     val_data = IMDBDataset(x_val, y_val)
     train_loader = DataLoader(
-        train_data, batch_size=128, shuffle=True, collate_fn=collate_fn_padding
+        train_data, batch_size=64, shuffle=True, collate_fn=collate_fn_padding
     )
     val_loader = DataLoader(
-        val_data, batch_size=128, shuffle=False, collate_fn=collate_fn_padding
+        val_data, batch_size=64, shuffle=False, collate_fn=collate_fn_padding
     )
 
     model = MLP(
@@ -63,7 +61,7 @@ def main():
         hidden=args.hidden_size,
         num_classes=numcls,
     )
-    num_epochs = 5
+    model.to(DEVICE)
     loss_func = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
@@ -140,3 +138,9 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# Epoch 1/5, Train loss: 0.5007964385012849, Validation loss: 0.4459183623519125, Validation accuracy: 0.8706
+# Epoch 2/5, Train loss: 0.42198807286759155, Validation loss: 0.4438407605961908, Validation accuracy: 0.869
+# Epoch 3/5, Train loss: 0.3909308744695621, Validation loss: 0.4371409427516068, Validation accuracy: 0.87
+# Epoch 4/5, Train loss: 0.36422841027141, Validation loss: 0.4292161728762373, Validation accuracy: 0.879
+# Epoch 5/5, Train loss: 0.346781600683261, Validation loss: 0.4312808400467981, Validation accuracy: 0.8744
