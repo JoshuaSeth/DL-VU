@@ -31,7 +31,6 @@ class RNN(nn.Module):
             nn.ReLU(),
             GlobalMaxPool(1),
             nn.Linear(hidden, num_classes),
-            nn.Softmax(),
         )
 
     def forward(self, x):
@@ -98,26 +97,26 @@ for epoch in range(num_epochs):
     tb_writer.add_scalar("Accuracy/val", epoch_val_acc, epoch)
     tb_writer.flush()
 
-# Epoch 1/20, Train loss: 0.5208, Val loss: 0.4724
-# Epoch 2/20, Train loss: 0.4336, Val loss: 0.4389
-# Epoch 3/20, Train loss: 0.3997, Val loss: 0.4427
-# Epoch 4/20, Train loss: 0.3746, Val loss: 0.4281
-# Epoch 5/20, Train loss: 0.3550, Val loss: 0.4232
-# Epoch 6/20, Train loss: 0.3418, Val loss: 0.4231
-# Epoch 7/20, Train loss: 0.3348, Val loss: 0.4232
-# Epoch 8/20, Train loss: 0.3303, Val loss: 0.4273
-# Epoch 9/20, Train loss: 0.3274, Val loss: 0.4246
-# Epoch 10/20, Train loss: 0.3258, Val loss: 0.4270
-# Epoch 11/20, Train loss: 0.3248, Val loss: 0.4253
-# Epoch 12/20, Train loss: 0.3240, Val loss: 0.4232
-# Epoch 13/20, Train loss: 0.3234, Val loss: 0.4254
-# Epoch 14/20, Train loss: 0.3230, Val loss: 0.4255
-# Epoch 15/20, Train loss: 0.3226, Val loss: 0.4200
-# Epoch 16/20, Train loss: 0.3223, Val loss: 0.4286
-# Epoch 17/20, Train loss: 0.3220, Val loss: 0.4225
-# Epoch 18/20, Train loss: 0.3216, Val loss: 0.4202
-# Epoch 19/20, Train loss: 0.3213, Val loss: 0.4208
-# Epoch 20/20, Train loss: 0.3212, Val loss: 0.4229
+# Epoch 1/20, Train loss: 0.4208, Val loss: 0.3458, Val acc: 0.85
+# Epoch 2/20, Train loss: 0.2636, Val loss: 0.2918, Val acc: 0.88
+# Epoch 3/20, Train loss: 0.1862, Val loss: 0.3188, Val acc: 0.88
+# Epoch 4/20, Train loss: 0.1258, Val loss: 0.2944, Val acc: 0.88
+# Epoch 5/20, Train loss: 0.0756, Val loss: 0.3201, Val acc: 0.88
+# Epoch 6/20, Train loss: 0.0401, Val loss: 0.3255, Val acc: 0.88
+# Epoch 7/20, Train loss: 0.0202, Val loss: 0.3518, Val acc: 0.88
+# Epoch 8/20, Train loss: 0.0108, Val loss: 0.3594, Val acc: 0.88
+# Epoch 9/20, Train loss: 0.0068, Val loss: 0.3750, Val acc: 0.88
+# Epoch 10/20, Train loss: 0.0047, Val loss: 0.3912, Val acc: 0.88
+# Epoch 11/20, Train loss: 0.0035, Val loss: 0.4035, Val acc: 0.88
+# Epoch 12/20, Train loss: 0.0027, Val loss: 0.4207, Val acc: 0.88
+# Epoch 13/20, Train loss: 0.0021, Val loss: 0.4160, Val acc: 0.88
+# Epoch 14/20, Train loss: 0.0017, Val loss: 0.4289, Val acc: 0.88
+# Epoch 15/20, Train loss: 0.0014, Val loss: 0.4334, Val acc: 0.88
+# Epoch 16/20, Train loss: 0.0012, Val loss: 0.4491, Val acc: 0.88
+# Epoch 17/20, Train loss: 0.0010, Val loss: 0.4461, Val acc: 0.88
+# Epoch 18/20, Train loss: 0.0008, Val loss: 0.4531, Val acc: 0.88
+# Epoch 19/20, Train loss: 0.0007, Val loss: 0.4897, Val acc: 0.88
+# Epoch 20/20, Train loss: 0.0006, Val loss: 0.4680, Val acc: 0.88
 
 # %%
 sns.set()
@@ -126,5 +125,5 @@ plt.plot(val_loss, label="Validation")
 plt.legend()
 plt.ylabel("CE Loss")
 plt.xlabel("Epoch")
-plt.title(f"Loss during training, final accuracy = {val_acc[-1]*100:.2f}%")
-plt.savefig("Q2")
+plt.title(f"Loss during training, best accuracy = {max(val_acc)*100:.2f}%")
+plt.savefig("q2")
