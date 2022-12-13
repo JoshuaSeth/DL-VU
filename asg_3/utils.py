@@ -73,6 +73,12 @@ def get_score(model, data_loader, loss_func, device=DEVICE):
     return mean_loss, accuracy
 
 
-def collate_fn_padding(samples):
+def collate_fn_padding(samples, padding_value=0, pad_y=False):
     x, y = list(zip(*samples))
-    return pad_sequence(x, batch_first=True, padding_value=0), torch.tensor(y)
+
+    if pad_y:
+        y = pad_sequence(y, batch_first=True, padding_value=padding_value)
+    else:
+        y = torch.tensor(y)
+
+    return pad_sequence(x, batch_first=True, padding_value=padding_value), y
