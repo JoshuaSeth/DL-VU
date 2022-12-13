@@ -1,17 +1,15 @@
 # %%
+from datetime import datetime
 from functools import partial
+
+import numpy as np
+import torch
 from rnn_data import load_brackets
-import numpy as np
-import torch
-from torch import nn
-from torch.utils.data import DataLoader, Dataset
-import torch
-import torch
-import numpy as np
 from torch import nn, optim
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 from torch.utils.tensorboard.writer import SummaryWriter
 from utils import DEVICE, collate_fn_padding
+
 
 # %%
 class BracketsDataset(Dataset):
@@ -76,7 +74,8 @@ def train(
 ):
     model.train()
 
-    tb = SummaryWriter("runs/imdb_sequence_0")
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    tb = SummaryWriter(f"runs/brackets_{timestamp}")
 
     # Load the data and loss function
     dataloader = DataLoader(
