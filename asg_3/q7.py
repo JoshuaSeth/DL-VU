@@ -43,25 +43,21 @@ class AR(nn.Module):
     ):
         super().__init__()
 
-        self.lstm_width = hidden_size
-        self.embeddings = embedding_size
-        self.num_layers = num_layers
-
         self.embedding = nn.Embedding(
             num_embeddings=n_vocab,
-            embedding_dim=self.embeddings,
+            embedding_dim=embedding_size,
         )
         self.lstm = nn.LSTM(
-            input_size=self.embeddings,
-            hidden_size=self.lstm_width,
-            num_layers=self.num_layers,
-            dropout=0.2,
+            input_size=embedding_size,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            batch_first=True,
         )
-        self.fc = nn.Linear(self.lstm_width, n_vocab)
+        self.fc = nn.Linear(hidden_size, n_vocab)
 
     def forward(self, x, states=None):
         embed = self.embedding(x)
-        # hidden & cell states default to zeros if not provided
+        # Hidden & cell states default to zeros if not provided
         output, states = self.lstm(embed, states)
         logits = self.fc(output)
 
@@ -145,6 +141,11 @@ def train(
                     masked_acc,
                     epoch * len(dataloader) + i_batch,
                 )
+                tb_writer.add_scalar(
+                    "Gradient Norm/train",
+                    gradient_norm,
+                    epoch * len(dataloader) + i_batch,
+                )
                 tb_writer.flush()
 
             losses.append(loss.item())
@@ -169,7 +170,7 @@ dataloader = DataLoader(
 model = AR(128, 128, 3, len(dataset.i2w))
 model.to(DEVICE)
 
-# Loss that ignores padding
+# Loss with lower weight for padding
 loss_weights = torch.ones(len(dataset.i2w))
 loss_weights[dataset.w2i[".pad"]] = 0.1
 loss_weights = loss_weights.to(DEVICE)
@@ -183,7 +184,7 @@ tb_writer = SummaryWriter(f"runs/brackets_{timestamp}")
 
 # Training process
 train_res = train(
-    dataloader, model, loss_func, optimizer, epochs=10, tb_writer=tb_writer
+    dataloader, model, loss_func, optimizer, epochs=50, tb_writer=tb_writer
 )
 Path("models/").mkdir(parents=True, exist_ok=True)
 torch.save(model.state_dict(), f"models/brackets_{timestamp}.pt")
@@ -230,9 +231,8 @@ for x_batch, y_batch in dataloader:
         pred = [dataset.i2w[i] for i in pred]
         true_y = [dataset.i2w[i] for i in true_y]
 
-        if pred == true_y:
-            print("".join(pred))
-            print("".join(true_y))
-            print()
+        print("".join(pred))
+        print("".join(true_y))
+        print()
 
     break
