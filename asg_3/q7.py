@@ -1,11 +1,13 @@
 # %%
 from datetime import datetime
 from functools import partial
+from typing import Optional
 
 import numpy as np
 import torch
 from rnn_data import load_brackets
 from torch import nn, optim
+from torch.nn.utils.clip_grad import clip_grad_norm_
 from torch.utils.data import DataLoader, Dataset
 from torch.utils.tensorboard.writer import SummaryWriter
 from utils import DEVICE, collate_fn_padding
@@ -66,28 +68,16 @@ class AR(nn.Module):
 
 
 def train(
-    dataset: BracketsDataset,
+    dataloader: DataLoader,
     model: AR,
-    epochs=10,
-    batch_size=32,
-    lr=0.001,
+    optimizer: optim.Optimizer,
+    epochs: int = 10,
+    tb_writer: Optional[SummaryWriter] = None,
 ):
     model.train()
 
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    tb = SummaryWriter(f"runs/brackets_{timestamp}")
-
     # Load the data and loss function
-    dataloader = DataLoader(
-        dataset,
-        batch_size=batch_size,
-        shuffle=False,
-        collate_fn=partial(
-            collate_fn_padding, padding_value=dataset.w2i[".pad"], pad_y=True
-        ),
-    )
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=lr)
 
     for epoch in range(epochs):
 
@@ -101,60 +91,70 @@ def train(
             loss = criterion(y_pred.transpose(1, 2), y_batch)
 
             loss.backward()
+            clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
 
-            accs = []
-            masked_accs = []
+            accs: list[bool] = []
+            masked_accs: list[bool] = []
 
-            for i, _ in enumerate(y_batch):
-                pred = np.argmax(
-                    y_pred.transpose(1, 2).cpu()[i].detach().numpy(), axis=0
-                )
-                true_y = y_batch[i].cpu().detach().numpy()
-                if list(pred) == list(true_y):
-                    accs.append(1)
-                else:
-                    accs.append(0)
+            for y_pred_i, y_batch_i in zip(y_pred, y_batch):
+                pred = y_pred_i.argmax(axis=-1).cpu().numpy()
+                true_y = y_batch_i.cpu().numpy()
+                accs.append((pred == true_y).all())
+
                 pred = pred[np.nonzero(pred)]
                 true_y = true_y[np.nonzero(true_y)]
-                if list(pred) == list(true_y):
-                    masked_accs.append(1)
-                else:
-                    masked_accs.append(0)
+                masked_accs.append(pred.tolist() == true_y.tolist())
 
             if i_batch % 1000 == 0:
                 print(
-                    {
-                        "epoch": epoch,
-                        "batch": i_batch,
-                        "loss": loss.item(),
-                        "acc": np.sum(accs) / len(accs),
-                        "masked_acc": np.sum(masked_accs) / len(masked_accs),
-                    }
+                    [
+                        f"{epoch=}",
+                        f"{i_batch=}",
+                        f"loss={loss.item():.4f}",
+                        f"acc={np.mean(accs):.3f}",
+                        f"masked_acc={np.mean(masked_accs):.3f}",
+                    ]
                 )
 
-            tb.add_scalar(
-                "Loss/train", loss.item(), epoch * (len(dataset) / batch_size) + i_batch
-            )
-            tb.add_scalar(
-                "Accuracy/val",
-                np.sum(accs) / len(accs),
-                epoch * (len(dataset) / batch_size) + i_batch,
-            )
-            tb.add_scalar(
-                "Masked Accuracy/val",
-                np.sum(masked_accs) / len(masked_accs),
-                epoch * (len(dataset) / batch_size) + i_batch,
-            )
-            tb.flush()
+            if tb_writer:
+                tb_writer.add_scalar(
+                    "Loss/train",
+                    loss.item(),
+                    epoch * len(dataloader) + i_batch,
+                )
+                tb_writer.add_scalar(
+                    "Accuracy/val",
+                    np.mean(accs),
+                    epoch * len(dataloader) + i_batch,
+                )
+                tb_writer.add_scalar(
+                    "Masked Accuracy/val",
+                    np.mean(masked_accs),
+                    epoch * len(dataloader) + i_batch,
+                )
+                tb_writer.flush()
 
 
 # %%
 dataset = BracketsDataset()
+dataloader = DataLoader(
+    dataset,
+    batch_size=128,
+    shuffle=True,
+    collate_fn=partial(
+        collate_fn_padding, padding_value=dataset.w2i[".pad"], pad_y=True
+    ),
+)
 
 model = AR(128, 128, 3, len(dataset.i2w))
 model.to(DEVICE)
 
-train(dataset, model, epochs=10, batch_size=32)
+optimizer = optim.Adam(model.parameters(), lr=0.001)
+
+timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+tb_writer = SummaryWriter(f"runs/brackets_{timestamp}")
+
+train(dataloader, model, optimizer, epochs=50, tb_writer=tb_writer)
 
 # %%
