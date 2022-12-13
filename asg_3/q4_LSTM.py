@@ -47,11 +47,11 @@ class LSTM(nn.Module):
 def main():
     # argument parser
     argparser = argparse.ArgumentParser()
-    argparser.add_argument("--embedding_size", default=300)
-    argparser.add_argument("--hidden_size", default=300)
-    argparser.add_argument("--layers", default=2)
-    argparser.add_argument("--lr", default=0.001)
-    argparser.add_argument("--epochs", default=5)
+    argparser.add_argument("--embedding_size", type=int, default=300)
+    argparser.add_argument("--hidden_size", type=int, default=300)
+    argparser.add_argument("--layers", type=int, default=2)
+    argparser.add_argument("--lr", type=float, default=0.001)
+    argparser.add_argument("--epochs", type=int, default=5)
     args = argparser.parse_args()
 
     # Load Data
