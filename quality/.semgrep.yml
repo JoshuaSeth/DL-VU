@@ -45,16 +45,6 @@ rules:
       - pattern-not-inside: |
           if __name__ == "__main__":
             ...
-    paths:
-      include: ["**/*.py"]
-      exclude:
-        - "**/tests/**"
-        - "**/scripts/**"
-        - "**/.venv/**"
-        - "**/venv/**"
-        - "**/build/**"
-        - "**/dist/**"
-        - "**/__pycache__/**"
 
   - id: forbid-requests-outside-infra
     message: "HTTP calls must go through an explicit infrastructure gateway."
@@ -68,10 +58,6 @@ rules:
           - pattern: urllib.request.$F(...)
           - pattern: urllib3.$F(...)
           - pattern: socket.$F(...)
-    paths:
-      exclude:
-        - "**/tests/**"
-        - "**/scripts/**"
 
   - id: forbid-aws-sdks-outside-infra
     message: "Cloud SDKs must be wrapped in an explicit infrastructure gateway."
@@ -82,10 +68,6 @@ rules:
           - pattern: boto3.$F(...)
           - pattern: botocore.$F(...)
           - pattern: aiobotocore.$F(...)
-    paths:
-      exclude:
-        - "**/tests/**"
-        - "**/scripts/**"
 
   - id: no-handmade-paths
     message: "Build keys and paths through a naming abstraction in application/interface code."
@@ -105,7 +87,3 @@ rules:
         - "**/app/interfaces/**"
         - "**/src/*/application/**"
         - "**/src/*/interfaces/**"
-      exclude:
-        - "**/app/naming/**"
-        - "**/src/*/naming/**"
-        - "**/tests/**"

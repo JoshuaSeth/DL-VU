@@ -1,9 +1,0 @@
-tests/
-scripts/
-archive/
-.venv/
-venv/
-build/
-dist/
-artifacts/
-__pycache__/
