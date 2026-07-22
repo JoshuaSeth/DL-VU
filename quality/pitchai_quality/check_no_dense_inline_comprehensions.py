@@ -1,38 +1,28 @@
-#!/usr/bin/env python3
+# Copyright (c) 2026 PitchAI. All rights reserved.
 """Fail on dense inline comprehensions that should be named in steps."""
 
 from __future__ import annotations
 
-import argparse
 import ast
-import sys
-from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from pathlib import Path
+from typing import TYPE_CHECKING, cast
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_SCAN_ROOTS = (
-    REPO_ROOT / "__init__.py",
-    REPO_ROOT / "app",
-    REPO_ROOT / "components",
-    REPO_ROOT / "data_access",
+from pitchai_quality.analysis_support import (
+    checker_parser,
+    parse_modules,
+    relative_path,
+    scan_roots,
+    write_failure,
+    write_success,
 )
-EXCLUDED_PARTS = {
-    ".git",
-    ".mypy_cache",
-    ".pytest_cache",
-    ".ruff_cache",
-    ".semgrep",
-    ".venv",
-    "__pycache__",
-    "build",
-    "dist",
-    "node_modules",
-    "scripts",
-    "test_support",
-    "tests",
-    "venv",
-}
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable, Sequence
+    from pathlib import Path
+
+    from pitchai_quality.analysis_support import ParsedModule
+
+_NESTED_CALL_THRESHOLD = 2
 ADVICE = """Preferred shape:
 all_paths_in_dir = root.iterdir()
 directories_in_dir = (path for path in all_paths_in_dir if path.is_dir())
@@ -46,53 +36,13 @@ materialization should each get a short named value."""
 
 
 @dataclass(frozen=True)
-class ParsedModule:
-    path: Path
-    module: str
-    tree: ast.Module
-
-
-@dataclass(frozen=True)
 class Violation:
+    """One dense comprehension and the reason it should be expanded."""
+
     path: Path
     line: int
     column: int
     reason: str
-
-
-def _module_name(path: Path) -> str:
-    resolved = path.resolve(strict=False)
-    try:
-        relative = resolved.relative_to(REPO_ROOT)
-    except ValueError:
-        relative = Path(resolved.name)
-    parts = relative.with_suffix("").parts
-    if parts[-1] == "__init__":
-        parts = parts[:-1]
-    return ".".join(parts)
-
-
-def _iter_python_files(paths: Iterable[Path]) -> Iterable[Path]:
-    for path in paths:
-        if any(part in EXCLUDED_PARTS for part in path.parts):
-            continue
-        if path.is_file() and path.suffix in {".py", ".pyi"}:
-            yield path
-        elif path.is_dir():
-            for child in path.rglob("*.py"):
-                if child.is_file() and not any(part in EXCLUDED_PARTS for part in child.parts):
-                    yield child
-            for child in path.rglob("*.pyi"):
-                if child.is_file() and not any(part in EXCLUDED_PARTS for part in child.parts):
-                    yield child
-
-
-def _parse_modules(paths: Iterable[Path]) -> tuple[ParsedModule, ...]:
-    modules: list[ParsedModule] = []
-    for path in _iter_python_files(paths):
-        source = path.read_text(encoding="utf-8")
-        modules.append(ParsedModule(path=path, module=_module_name(path), tree=ast.parse(source, filename=str(path))))
-    return tuple(modules)
 
 
 def _parent_map(tree: ast.AST) -> dict[ast.AST, ast.AST]:
@@ -118,10 +68,6 @@ def _comprehensions(tree: ast.AST) -> Iterable[ast.GeneratorExp | ast.ListComp |
             yield node
 
 
-def _contains_named_expr(node: ast.AST) -> bool:
-    return any(isinstance(child, ast.NamedExpr) for child in ast.walk(node))
-
-
 def _call_ancestor_count(ancestors: Sequence[ast.AST]) -> int:
     count = 0
     for ancestor in ancestors:
@@ -144,33 +90,12 @@ def _is_inside_inline_conditional_with_call(ancestors: Sequence[ast.AST]) -> boo
     return False
 
 
-def _is_direct_assignment(ancestors: Sequence[ast.AST]) -> bool:
-    return bool(ancestors) and isinstance(ancestors[0], ast.Assign | ast.AnnAssign)
-
-
-def _first_generator(node: ast.GeneratorExp | ast.ListComp | ast.SetComp | ast.DictComp) -> ast.comprehension | None:
-    return node.generators[0] if node.generators else None
-
-
-def _is_named_source(node: ast.AST) -> bool:
-    return isinstance(node, ast.Name | ast.Attribute | ast.Subscript)
-
-
-def _target_name(target: ast.AST) -> str | None:
-    return target.id if isinstance(target, ast.Name) else None
-
-
 def _projects_target_value(node: ast.GeneratorExp | ast.ListComp | ast.SetComp | ast.DictComp, target: ast.AST) -> bool:
-    target_name = _target_name(target)
-    if target_name is None or isinstance(node, ast.DictComp):
+    if not isinstance(target, ast.Name) or isinstance(node, ast.DictComp):
         return True
     if not isinstance(node.elt, ast.Name):
         return True
-    return node.elt.id != target_name
-
-
-def _has_filter(node: ast.GeneratorExp | ast.ListComp | ast.SetComp | ast.DictComp) -> bool:
-    return any(generator.ifs for generator in node.generators)
+    return node.elt.id != target.id
 
 
 def _has_compound_filter(node: ast.GeneratorExp | ast.ListComp | ast.SetComp | ast.DictComp) -> bool:
@@ -184,32 +109,44 @@ def _assigned_comprehension_reason(
     node: ast.GeneratorExp | ast.ListComp | ast.SetComp | ast.DictComp,
     ancestors: Sequence[ast.AST],
 ) -> str | None:
-    if not _is_direct_assignment(ancestors):
+    is_direct_assignment = bool(ancestors) and isinstance(ancestors[0], ast.Assign | ast.AnnAssign)
+    if not is_direct_assignment:
         return None
-    generator = _first_generator(node)
-    if generator is None:
+    if not node.generators:
         return None
-    has_source_lookup = not _is_named_source(generator.iter)
+    generator = node.generators[0]
+    has_source_lookup = not isinstance(generator.iter, ast.Name | ast.Attribute | ast.Subscript)
     has_projection = _projects_target_value(node, generator.target)
-    has_filter = _has_filter(node)
+    has_filter = any(item.ifs for item in node.generators)
     if _has_compound_filter(node):
         return "assigned comprehension has a compound filter; split each filter into a short named vertical step"
     responsibility_count = sum((has_source_lookup, has_projection, has_filter))
     if responsibility_count > 1:
         return (
-            "assigned comprehension still does multiple things; use multiple short named comprehensions for source lookup, "
-            "filtering, mapping, and final materialization"
+            "assigned comprehension still does multiple things; use multiple short named comprehensions for source "
+            "lookup, filtering, mapping, and final materialization"
         )
     return None
 
 
-def _violation_reason(node: ast.GeneratorExp | ast.ListComp | ast.SetComp | ast.DictComp, ancestors: Sequence[ast.AST]) -> str | None:
-    if _contains_named_expr(node):
+def _violation_reason(
+    node: ast.GeneratorExp | ast.ListComp | ast.SetComp | ast.DictComp,
+    ancestors: Sequence[ast.AST],
+) -> str | None:
+    contains_named_expression = False
+    for child in ast.walk(node):
+        if isinstance(child, ast.NamedExpr):
+            contains_named_expression = True
+            break
+    if contains_named_expression:
         return "walrus inside comprehension makes compute-and-filter logic too dense"
-    if _call_ancestor_count(ancestors) >= 2:
+    if _call_ancestor_count(ancestors) >= _NESTED_CALL_THRESHOLD:
         return "comprehension is hidden inside nested calls; name the computed values before final materialization"
     if _is_inside_inline_conditional_with_call(ancestors):
-        return "comprehension is mixed with an inline conditional and a call; split the condition and values into named steps"
+        return (
+            "comprehension is mixed with an inline conditional and a call; split the condition and values into named "
+            "steps"
+        )
     return _assigned_comprehension_reason(node, ancestors)
 
 
@@ -230,32 +167,26 @@ def _find_violations(parsed_modules: Sequence[ParsedModule]) -> list[Violation]:
     return violations
 
 
-def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("paths", nargs="*", help="Optional files or folders. Defaults to runtime roots.")
-    return parser
-
-
-def _relative(path: Path) -> Path:
-    return path.relative_to(REPO_ROOT) if path.is_relative_to(REPO_ROOT) else path
-
-
 def main(argv: Sequence[str] | None = None) -> int:
-    args = _parser().parse_args(list(argv) if argv is not None else None)
-    roots = tuple(Path(raw).resolve(strict=False) for raw in args.paths) if args.paths else DEFAULT_SCAN_ROOTS
-    violations = _find_violations(_parse_modules(roots))
+    """Run the dense-comprehension checker.
+
+    Returns:
+        Zero when no violations exist; otherwise one.
+    """
+    args = checker_parser("Reject dense inline comprehensions.").parse_args(list(argv) if argv is not None else None)
+    raw_paths = cast("list[str]", args.paths)
+    violations = _find_violations(parse_modules(scan_roots(raw_paths)))
 
     if violations:
         for violation in violations:
-            print(
-                f"{_relative(violation.path)}:{violation.line}:{violation.column}: "
+            write_failure(
+                f"{relative_path(violation.path)}:{violation.line}:{violation.column}: "
                 f"dense inline comprehension is not allowed; {violation.reason}",
-                file=sys.stderr,
             )
-        print(f"\n{ADVICE}", file=sys.stderr)
+        write_failure(f"\n{ADVICE}")
         return 1
 
-    print("ok no_dense_inline_comprehensions")
+    write_success("ok no_dense_inline_comprehensions")
     return 0
 
 
